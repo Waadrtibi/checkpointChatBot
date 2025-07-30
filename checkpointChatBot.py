@@ -12,6 +12,12 @@ from sklearn.metrics.pairwise import cosine_similarity
 nltk.download('punkt')
 nltk.download('stopwords')
 
+import os
+
+# Obtient le chemin du fichier Python en cours
+base_dir = os.path.dirname(os.path.abspath(__file__))
+chemin_json = os.path.join(base_dir, "data", "intents.json")
+
 # --- 1. Chargement des données RASA NLU ---
 def charger_exemples(chemin):
     with open(chemin, 'r', encoding='utf-8') as fichier:
