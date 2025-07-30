@@ -1,82 +1,72 @@
 import streamlit as st
-import random
-import json
-import os
-import re
+import pandas as pd
 import nltk
-from nltk.corpus import stopwords
+import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import os
 
-# Téléchargement des données NLTK
 nltk.download('punkt')
 nltk.download('stopwords')
 
-import os
+from nltk.corpus import stopwords
+stop_words = set(stopwords.words('english'))
 
-# Obtient le chemin du fichier Python en cours
-base_dir = os.path.dirname(os.path.abspath(__file__))
-chemin_json = os.path.join(base_dir, "data", "intents.json")
+# === Prétraitement du texte ===
+def preprocess(text):
+    text = str(text).lower()
+    text = re.sub(r'\W+', ' ', text)  # Supprimer la ponctuation
+    words = nltk.word_tokenize(text)
+    words = [word for word in words if word not in stop_words]
+    return ' '.join(words)
 
-# --- 1. Chargement des données RASA NLU ---
-def charger_exemples(chemin):
-    with open(chemin, 'r', encoding='utf-8') as fichier:
-        data = json.load(fichier)
-    return data['rasa_nlu_data']['common_examples']
+# === Charger les données du CSV ===
+def load_data():
+    base_path = os.path.dirname(os.path.abspath(__file__))
+    data_path = os.path.join(base_path, "climate_change_faqs.csv")
 
-# --- 2. Prétraitement ---
-def pretraiter(texte):
-    texte = texte.lower()
-    texte = re.sub(r'\W+', ' ', texte)
-    tokens = nltk.word_tokenize(texte)
-    stop_words = set(stopwords.words('english'))  # ou 'french' si tes données sont en français
-    return ' '.join([w for w in tokens if w not in stop_words])
+    # Lecture avec encodage pour corriger les caractères spéciaux
+    df = pd.read_csv(data_path, encoding='utf-8-sig')
 
-# --- 3. Préparer le dataset ---
-def preparer_ensemble(common_examples):
-    texts = []
-    intents = []
-    for exemple in common_examples:
-        texts.append(pretraiter(exemple["text"]))
-        intents.append(exemple["intent"])
-    return texts, intents
+    # Filtrer uniquement les questions
+    df = df[df['text_type'] == 'q'].copy()
 
-# --- 4. Trouver l’intent le plus proche ---
-def trouver_intent(question, texts, intents, vectorizer):
-    question_proc = pretraiter(question)
-    question_vec = vectorizer.transform([question_proc])
-    text_vecs = vectorizer.transform(texts)
-    similarites = cosine_similarity(question_vec, text_vecs).flatten()
-    if max(similarites) == 0:
-        return None
-    best_index = similarites.argmax()
-    return intents[best_index]
+    # Nettoyage
+    df['faq_clean'] = df['faq'].apply(preprocess)
 
-# --- 5. Fonction du chatbot ---
-def chatbot(question, intents_data, texts, intents, vectorizer):
-    intent = trouver_intent(question, texts, intents, vectorizer)
-    if not intent:
-        return "🤖 Désolé, je ne comprends pas votre question."
-    # Générer une réponse fictive
-    return f"Intent reconnu : **{intent}** ✅"
+    # Vérification des colonnes
+    if 'faq' not in df.columns:
+        st.error("❌ Le fichier CSV doit contenir la colonne 'faq'.")
+        st.stop()
 
-# --- 6. Interface Streamlit ---
+    return df
+
+# === Fonction de similarité ===
+def get_most_relevant_answer(df, user_input):
+    user_input_clean = preprocess(user_input)
+    tfidf = TfidfVectorizer()
+    tfidf_matrix = tfidf.fit_transform(df['faq_clean'].tolist() + [user_input_clean])
+    similarity_scores = cosine_similarity(tfidf_matrix[-1], tfidf_matrix[:-1])
+    index = similarity_scores.argmax()
+    return df.iloc[index]['faq']
+
+# === Fonction principale du chatbot ===
+def chatbot(user_input, df):
+    return get_most_relevant_answer(df, user_input)
+
+# === Interface Streamlit ===
 def main():
-    st.set_page_config(page_title="Chatbot Rasa NLU", page_icon="🤖")
-    st.title("🌦️ Chatbot basé sur des données Rasa NLU")
-    st.markdown("Posez une question météo, et je vais détecter l'intention.")
+    st.title("🌍 Climate Change FAQ Chatbot")
+    st.write("Posez une question sur le changement climatique et je vais chercher dans les FAQ officielles du GIEC/IPCC.")
 
-    chemin_json = r"C:\Users\Waad RTIBI\checkpointChatBot\weather_intent_entities.json"
-    examples = charger_exemples(chemin_json)
-    global texts, intents, vectorizer
-    texts, intents = preparer_ensemble(examples)
-    vectorizer = TfidfVectorizer()
-    vectorizer.fit(texts)
+    df = load_data()
 
-    question = st.text_input("Votre question :")
-    if question:
-        reponse = chatbot(question, examples, texts, intents, vectorizer)
-        st.markdown(f"**Réponse du chatbot :** {reponse}")
+    user_input = st.text_input("❓ Votre question :")
+
+    if user_input:
+        response = chatbot(user_input, df)
+        st.markdown("💬 **Réponse la plus proche trouvée :**")
+        st.write(response)
 
 if __name__ == "__main__":
     main()
