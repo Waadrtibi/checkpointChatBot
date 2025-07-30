@@ -60,7 +60,7 @@ def main():
     st.title("🌦️ Chatbot basé sur des données Rasa NLU")
     st.markdown("Posez une question météo, et je vais détecter l'intention.")
 
-    chemin_json = "C:/Users/Waad RTIBI/checkpointChatBot/weather_intent_entities.json"
+    chemin_json = r"C:\Users\Waad RTIBI\checkpointChatBot\weather_intent_entities.json"
     examples = charger_exemples(chemin_json)
     global texts, intents, vectorizer
     texts, intents = preparer_ensemble(examples)
